@@ -60,5 +60,6 @@ pub use self::{
         DerivesRegistry,
         Module,
         TypeGenerator,
+        TypeSubstitutes,
     },
 };

@@ -4,6 +4,7 @@
 
 mod composite_def;
 mod derives;
+mod substitutes;
 #[cfg(test)]
 mod tests;
 mod type_def;
@@ -27,10 +28,7 @@ use scale_info::{
     Type,
     TypeDef,
 };
-use std::collections::{
-    BTreeMap,
-    HashMap,
-};
+use std::collections::BTreeMap;
 
 pub use self::{
     composite_def::{
@@ -42,6 +40,7 @@ pub use self::{
         Derives,
         DerivesRegistry,
     },
+    substitutes::TypeSubstitutes,
     type_def::TypeDefGen,
     type_def_params::TypeDefParameters,
     type_path::{
@@ -61,7 +60,7 @@ pub struct TypeGenerator<'a> {
     /// Registry of type definitions to be transformed into Rust type definitions.
     type_registry: &'a PortableRegistry,
     /// User defined overrides for generated types.
-    type_substitutes: HashMap<String, syn::TypePath>,
+    type_substitutes: TypeSubstitutes,
     /// Set of derives with which to annotate generated types.
     derives: DerivesRegistry,
     /// The `subxt` crate access path in the generated code.
@@ -73,7 +72,7 @@ impl<'a> TypeGenerator<'a> {
     pub fn new(
         type_registry: &'a PortableRegistry,
         root_mod: &'static str,
-        type_substitutes: HashMap<String, syn::TypePath>,
+        type_substitutes: TypeSubstitutes,
         derives: DerivesRegistry,
         crate_path: CratePath,
     ) -> Self {
@@ -116,7 +115,7 @@ impl<'a> TypeGenerator<'a> {
         module: &mut Module,
     ) {
         let joined_path = path.join("::");
-        if self.type_substitutes.contains_key(&joined_path) {
+        if self.type_substitutes.inner.contains_key(&joined_path) {
             return
         }
 
@@ -222,7 +221,7 @@ impl<'a> TypeGenerator<'a> {
             TypeDef::Composite(_) | TypeDef::Variant(_) => {
                 let joined_path = ty.path().segments().join("::");
                 if let Some(substitute_type_path) =
-                    self.type_substitutes.get(&joined_path)
+                    self.type_substitutes.inner.get(&joined_path)
                 {
                     TypePathType::Path {
                         path: substitute_type_path.clone(),
