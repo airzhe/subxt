@@ -90,10 +90,7 @@ extern crate proc_macro;
 use std::str::FromStr;
 
 use darling::FromMeta;
-use proc_macro::{
-    Span,
-    TokenStream,
-};
+use proc_macro::TokenStream;
 use proc_macro_error::{
     abort,
     abort_call_site,

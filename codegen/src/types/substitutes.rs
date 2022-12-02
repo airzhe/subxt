@@ -5,10 +5,7 @@
 use crate::CratePath;
 use darling::ToTokens as _;
 use std::collections::HashMap;
-use syn::{
-    parse_quote,
-    spanned::Spanned as _,
-};
+use syn::parse_quote;
 
 #[derive(Debug)]
 pub struct TypeSubstitutes {
