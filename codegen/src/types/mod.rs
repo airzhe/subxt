@@ -88,53 +88,40 @@ impl<'a> TypeGenerator<'a> {
 
     /// Generate a module containing all types defined in the supplied type registry.
     pub fn generate_types_mod(&self) -> Module {
-        let mut root_mod =
-            Module::new(self.types_mod_ident.clone(), self.types_mod_ident.clone());
+        let root_mod_ident = &self.types_mod_ident;
+        let mut root_mod = Module::new(root_mod_ident.clone(), root_mod_ident.clone());
 
-        for ty in self.type_registry.types().iter() {
-            if ty.ty().path().namespace().is_empty() {
-                // prelude types e.g. Option/Result have no namespace, so we don't generate them
+        for ty in self.type_registry.types() {
+            let path = ty.ty().path();
+            // Don't generate a type if it was substituted - the target type might
+            // not be in the type registry + our resolution already performs the substitution.
+            let joined_path = path.segments().join("::");
+            if self.type_substitutes.inner.contains_key(&joined_path) {
                 continue
             }
-            self.insert_type(
-                ty.ty().clone(),
-                ty.ty().path().namespace().to_vec(),
-                &self.types_mod_ident,
-                &mut root_mod,
-            )
+
+            // Lazily create submodules for the encountered namespace path, if they don't exist
+            let namespace = path.namespace();
+            let innermost_module = namespace
+                .iter()
+                .map(|segment| Ident::new(segment, Span::call_site()))
+                .fold(&mut root_mod, |module, ident| {
+                    module
+                        .children
+                        .entry(ident.clone())
+                        .or_insert_with(|| Module::new(ident, root_mod_ident.clone()))
+                });
+
+            // prelude types e.g. Option/Result have no namespace, so we don't generate them
+            if !namespace.is_empty() {
+                innermost_module.types.insert(
+                    path.clone(),
+                    TypeDefGen::from_type(ty.ty(), self, &self.crate_path),
+                );
+            }
         }
 
         root_mod
-    }
-
-    fn insert_type(
-        &'a self,
-        ty: Type<PortableForm>,
-        path: Vec<String>,
-        root_mod_ident: &Ident,
-        module: &mut Module,
-    ) {
-        let joined_path = path.join("::");
-        if self.type_substitutes.inner.contains_key(&joined_path) {
-            return
-        }
-
-        let segment = path.first().expect("path has at least one segment");
-        let mod_ident = Ident::new(segment, Span::call_site());
-
-        let child_mod = module
-            .children
-            .entry(mod_ident.clone())
-            .or_insert_with(|| Module::new(mod_ident, root_mod_ident.clone()));
-
-        if path.len() == 1 {
-            child_mod.types.insert(
-                ty.path().clone(),
-                TypeDefGen::from_type(ty, self, &self.crate_path),
-            );
-        } else {
-            self.insert_type(ty, path[1..].to_vec(), root_mod_ident, child_mod)
-        }
     }
 
     /// # Panics
