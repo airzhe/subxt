@@ -12,42 +12,19 @@ mod type_def_params;
 mod type_path;
 
 use darling::FromMeta;
-use proc_macro2::{
-    Ident,
-    Span,
-    TokenStream,
-};
+use proc_macro2::{Ident, Span, TokenStream};
 use proc_macro_error::abort_call_site;
-use quote::{
-    quote,
-    ToTokens,
-};
-use scale_info::{
-    form::PortableForm,
-    PortableRegistry,
-    Type,
-    TypeDef,
-};
+use quote::{quote, ToTokens};
+use scale_info::{form::PortableForm, PortableRegistry, Type, TypeDef};
 use std::collections::BTreeMap;
 
 pub use self::{
-    composite_def::{
-        CompositeDef,
-        CompositeDefFieldType,
-        CompositeDefFields,
-    },
-    derives::{
-        Derives,
-        DerivesRegistry,
-    },
+    composite_def::{CompositeDef, CompositeDefFieldType, CompositeDefFields},
+    derives::{Derives, DerivesRegistry},
     substitutes::TypeSubstitutes,
     type_def::TypeDefGen,
     type_def_params::TypeDefParameters,
-    type_path::{
-        TypeParameter,
-        TypePath,
-        TypePathType,
-    },
+    type_path::{TypeParameter, TypePath, TypePathType},
 };
 
 pub type Field = scale_info::Field<PortableForm>;
@@ -97,11 +74,14 @@ impl<'a> TypeGenerator<'a> {
             // not be in the type registry + our resolution already performs the substitution.
             let joined_path = path.segments().join("::");
             if self.type_substitutes.inner.contains_key(&joined_path) {
-                continue
+                continue;
             }
 
-            // Lazily create submodules for the encountered namespace path, if they don't exist
             let namespace = path.namespace();
+            // prelude types e.g. Option/Result have no namespace, so we don't generate them
+            if namespace.is_empty() { continue; }
+
+            // Lazily create submodules for the encountered namespace path, if they don't exist
             let innermost_module = namespace
                 .iter()
                 .map(|segment| Ident::new(segment, Span::call_site()))
@@ -112,13 +92,10 @@ impl<'a> TypeGenerator<'a> {
                         .or_insert_with(|| Module::new(ident, root_mod_ident.clone()))
                 });
 
-            // prelude types e.g. Option/Result have no namespace, so we don't generate them
-            if !namespace.is_empty() {
                 innermost_module.types.insert(
                     path.clone(),
                     TypeDefGen::from_type(ty.ty(), self, &self.crate_path),
                 );
-            }
         }
 
         root_mod
@@ -194,7 +171,7 @@ impl<'a> TypeGenerator<'a> {
             )
         }
 
-        let params = ty
+        let params: Vec<_> = ty
             .type_params()
             .iter()
             .filter_map(|f| {
@@ -207,12 +184,14 @@ impl<'a> TypeGenerator<'a> {
         let ty = match ty.type_def() {
             TypeDef::Composite(_) | TypeDef::Variant(_) => {
                 let joined_path = ty.path().segments().join("::");
-                if let Some(substitute_type_path) =
-                    self.type_substitutes.inner.get(&joined_path)
+                let syn_path = syn::parse_str(&joined_path).expect("path to be valid");
+                if let Some((path, params)) = self
+                    .type_substitutes
+                    .for_path_with_params(&syn_path, &params)
                 {
                     TypePathType::Path {
-                        path: substitute_type_path.clone(),
-                        params,
+                        path: path.clone(),
+                        params: params.to_vec(),
                     }
                 } else {
                     TypePathType::from_type_def_path(
